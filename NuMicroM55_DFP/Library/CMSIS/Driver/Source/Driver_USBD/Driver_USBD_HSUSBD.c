@@ -1127,9 +1127,19 @@ static void USBD_DataOutStage(const USBD_Info_t *const ptr_usbd_info, uint8_t ep
     ptr_ep = &ptr_usbd_info->ptr_rw_info->ep_info[ep - ptr_usbd_info->ptr_ro_info->ptr_USBD->EP];
 
     num_transferred = ep->EPDATCNT & HSUSBD_EPDATCNT_DATCNT_Msk;
+    if (num_transferred > ptr_ep->num - ptr_ep->num_transferred_total)
+    {
+        num_transferred = ptr_ep->num - ptr_ep->num_transferred_total;
+    }
+
+    USBD_ReadEpBuffer((uint8_t *)ptr_ep->data + ptr_ep->num_transferred_total, (uint32_t *)&ep->EPDAT, num_transferred);
     ptr_ep->num_transferred_total += num_transferred;
 
-    USBD_ReadEpBuffer((uint8_t *)ptr_ep->data, (uint32_t *)&ep->EPDAT, num_transferred);
+    if ((ptr_ep->num_transferred_total < ptr_ep->num) && (num_transferred == ptr_ep->max_packet_size))
+    {
+        return;
+    }
+    ep->EPINTEN &= ~HSUSBD_EPINTEN_RXPKIEN_Msk;
 
     if ((ptr_usbd_info->ptr_rw_info->cb_endpoint_event != NULL))
     {
@@ -1544,7 +1554,7 @@ NVT_ITCM void HSUSBDn_IRQHandler(const USBD_Info_t *const ptr_usbd_info)
                         }
                     }
                 }
-                else
+                else if (u32EpIntSts & HSUSBD_EPINTSTS_RXPKIF_Msk)
                 {
                     USBD_DataOutStage(ptr_usbd_info, ep_addr);
                 }
